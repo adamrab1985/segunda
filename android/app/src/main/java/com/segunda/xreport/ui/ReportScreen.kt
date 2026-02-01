@@ -28,23 +28,29 @@ fun ReportScreen(prefs: RegisterPreferences, hiddenRegisters: Set<String>, onOpe
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshTrigger by remember { mutableStateOf(0) }
+    var isScraping by remember { mutableStateOf(false) }
+    var scrapeMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(refreshTrigger) {
         loading = true
         error = null
-        withContext(Dispatchers.IO) {
-            try {
-                val response = ApiModule.xReportApi.getLatestReport()
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    report = body
-                    body?.stores?.let { prefs.saveLastStoreNames(it.map { s -> s.name }) }
-                } else {
-                    val bodyStr = response.errorBody()?.string()
-                    val detail = bodyStr?.let { s -> try { org.json.JSONObject(s).optString("detail", "").takeIf { it.isNotEmpty() } } catch (_: Exception) { null } }
-                    error = if (detail != null) "Error: $detail" else "No report yet (${response.code()})"
-                }
-            } catch (e: Exception) { error = e.message ?: "Network error" }
+        try {
+            val response = withContext(Dispatchers.IO) {
+                ApiModule.xReportApi.getLatestReport()
+            }
+            if (response.isSuccessful) {
+                val body = response.body()
+                report = body
+                body?.stores?.let { prefs.saveLastStoreNames(it.map { s -> s.name }) }
+                error = null
+            } else {
+                val bodyStr = response.errorBody()?.string()
+                val detail = bodyStr?.let { s -> try { org.json.JSONObject(s).optString("detail", "").takeIf { it.isNotEmpty() } } catch (_: Exception) { null } }
+                error = if (detail != null) "Error: $detail" else "No report yet (${response.code()})"
+            }
+        } catch (e: Exception) {
+            error = e.message ?: "Network error"
+        } finally {
             loading = false
         }
     }
@@ -70,9 +76,62 @@ fun ReportScreen(prefs: RegisterPreferences, hiddenRegisters: Set<String>, onOpe
                 }
                 error != null && report == null -> Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
-                    Text("Run the Python script, then tap refresh.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), fontSize = 14.sp)
+                    Text("Tap 'Fetch Fresh Data' below to scrape live data.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), fontSize = 14.sp)
                 }
-                report != null -> ReportContent(report!!, hiddenRegisters, Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PaddingValues(16.dp)))
+                report != null -> Column(Modifier.fillMaxSize()) {
+                    ReportContent(report!!, hiddenRegisters, Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(PaddingValues(16.dp)))
+                    
+                    // Fetch Fresh Data button at bottom
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 8.dp
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            if (scrapeMessage != null) {
+                                Text(
+                                    scrapeMessage!!,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    isScraping = true
+                                    scrapeMessage = "Triggering scraper..."
+                                    kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+                                        try {
+                                            val response = ApiModule.xReportApi.triggerScrape()
+                                            if (response.isSuccessful) {
+                                                val body = response.body()
+                                                scrapeMessage = body?.message ?: "Scraper started. Wait 1-2 minutes then tap refresh."
+                                            } else {
+                                                scrapeMessage = "Failed to trigger scraper. Try again."
+                                            }
+                                        } catch (e: Exception) {
+                                            scrapeMessage = "Network error: ${e.message}"
+                                        } finally {
+                                            isScraping = false
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !isScraping
+                            ) {
+                                if (isScraping) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                Text(if (isScraping) "Triggering..." else "Fetch Fresh Data")
+                            }
+                        }
+                    }
+                }
             }
         }
     }

@@ -57,13 +57,19 @@ def send_telegram_message(message: str):
 
 def post_report_to_api(report_date: str, report_time: str, stores: list, totals: dict):
     if not X_REPORT_API_URL or not X_REPORT_SECRET:
+        print("(API POST skipped: X_REPORT_API_URL or X_REPORT_SECRET not set in .env)")
         return
     url = f"{X_REPORT_API_URL}/api/xreport"
+    print(f"Posting to: {url}")
     headers = {"Content-Type": "application/json", "x-report-secret": X_REPORT_SECRET}
     try:
-        requests.post(url, json={"reportDate": report_date, "reportTime": report_time, "stores": stores, "totals": totals}, headers=headers, timeout=15)
-    except Exception:
-        pass
+        r = requests.post(url, json={"reportDate": report_date, "reportTime": report_time, "stores": stores, "totals": totals}, headers=headers, timeout=15)
+        if r.status_code in (200, 201):
+            print("Report posted to API successfully.")
+        else:
+            print(f"API POST failed: {r.status_code} - {r.text[:200]}")
+    except Exception as e:
+        print(f"API POST error: {e}")
 
 
 def get_totals(account):

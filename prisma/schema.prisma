@@ -1,0 +1,17 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model XReportSnapshot {
+  id         String   @id @default(cuid())
+  reportDate String
+  reportTime String
+  stores     Json
+  totals     Json
+  createdAt  DateTime @default(now())
+}

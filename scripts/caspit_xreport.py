@@ -33,6 +33,12 @@ CHROME_DRIVER_PATH = os.environ.get(
     "/Users/adamrab/chrome-tools/chromedriver-mac-arm64/chromedriver",
 )
 
+# Chrome binary path - different on Mac vs GitHub Actions (Linux)
+CHROME_BINARY_PATH = os.environ.get(
+    "CHROME_BINARY_PATH",
+    "/Users/adamrab/chrome-tools/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+)
+
 LOGIN_URL = "https://caspitlight.valu.co.il/bo#/login"
 XREPORT_URL = "https://caspitlight.valu.co.il/bo#/xreports"
 SALES_URL = "https://caspitlight.valu.co.il/bo#/sales"
@@ -75,10 +81,11 @@ def post_report_to_api(report_date: str, report_time: str, stores: list, totals:
 def get_totals(account):
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
-    options.binary_location = (
-        "/Users/adamrab/chrome-tools/chrome-mac-arm64/"
-        "Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
-    )
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    # Set Chrome binary path only if specified (not needed on Linux with system Chrome)
+    if CHROME_BINARY_PATH and os.path.exists(CHROME_BINARY_PATH):
+        options.binary_location = CHROME_BINARY_PATH
     driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
     try:
         driver.get(LOGIN_URL)

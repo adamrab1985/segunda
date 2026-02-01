@@ -18,7 +18,10 @@ import androidx.compose.ui.unit.sp
 import com.segunda.xreport.api.ApiModule
 import com.segunda.xreport.api.XReportResponse
 import com.segunda.xreport.data.RegisterPreferences
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,9 +33,14 @@ fun ReportScreen(prefs: RegisterPreferences, hiddenRegisters: Set<String>, onOpe
     var refreshTrigger by remember { mutableStateOf(0) }
     var isScraping by remember { mutableStateOf(false) }
     var scrapeMessage by remember { mutableStateOf<String?>(null) }
+    var isPolling by remember { mutableStateOf(false) }
+    var pollCount by remember { mutableStateOf(0) }
+    var lastReportId by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
+    // Fetch report data
     LaunchedEffect(refreshTrigger) {
-        loading = true
+        loading = report == null
         error = null
         try {
             val response = withContext(Dispatchers.IO) {
@@ -40,6 +48,11 @@ fun ReportScreen(prefs: RegisterPreferences, hiddenRegisters: Set<String>, onOpe
             }
             if (response.isSuccessful) {
                 val body = response.body()
+                // Check if we got new data while polling
+                if (isPolling && body != null && body.id != lastReportId && lastReportId != null) {
+                    isPolling = false
+                    scrapeMessage = "Fresh data loaded!"
+                }
                 report = body
                 body?.stores?.let { prefs.saveLastStoreNames(it.map { s -> s.name }) }
                 error = null
@@ -52,6 +65,19 @@ fun ReportScreen(prefs: RegisterPreferences, hiddenRegisters: Set<String>, onOpe
             error = e.message ?: "Network error"
         } finally {
             loading = false
+        }
+    }
+
+    // Auto-poll every 30 seconds while isPolling is true (max 10 times = 5 minutes)
+    LaunchedEffect(isPolling, pollCount) {
+        if (isPolling && pollCount < 10) {
+            delay(30_000) // Wait 30 seconds
+            pollCount++
+            scrapeMessage = "Checking for new data... (${pollCount}/10)"
+            refreshTrigger++
+        } else if (pollCount >= 10) {
+            isPolling = false
+            scrapeMessage = "Polling stopped. Tap refresh to check manually."
         }
     }
 
@@ -100,12 +126,16 @@ fun ReportScreen(prefs: RegisterPreferences, hiddenRegisters: Set<String>, onOpe
                                 onClick = {
                                     isScraping = true
                                     scrapeMessage = "Triggering scraper..."
-                                    kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+                                    lastReportId = report?.id  // Remember current report ID
+                                    scope.launch(Dispatchers.IO) {
                                         try {
                                             val response = ApiModule.xReportApi.triggerScrape()
                                             if (response.isSuccessful) {
                                                 val body = response.body()
-                                                scrapeMessage = body?.message ?: "Scraper started. Wait 1-2 minutes then tap refresh."
+                                                scrapeMessage = "Scraper triggered. Auto-checking every 30s..."
+                                                // Start polling
+                                                pollCount = 0
+                                                isPolling = true
                                             } else {
                                                 scrapeMessage = "Failed to trigger scraper. Try again."
                                             }
@@ -117,9 +147,9 @@ fun ReportScreen(prefs: RegisterPreferences, hiddenRegisters: Set<String>, onOpe
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
-                                enabled = !isScraping
+                                enabled = !isScraping && !isPolling
                             ) {
-                                if (isScraping) {
+                                if (isScraping || isPolling) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(16.dp),
                                         color = Color.White,
@@ -127,7 +157,13 @@ fun ReportScreen(prefs: RegisterPreferences, hiddenRegisters: Set<String>, onOpe
                                     )
                                     Spacer(Modifier.width(8.dp))
                                 }
-                                Text(if (isScraping) "Triggering..." else "Fetch Fresh Data")
+                                Text(
+                                    when {
+                                        isScraping -> "Triggering..."
+                                        isPolling -> "Waiting for data..."
+                                        else -> "Fetch Fresh Data"
+                                    }
+                                )
                             }
                         }
                     }

@@ -21,9 +21,6 @@ jobs:
         with:
           chrome-version: stable
 
-      - name: Set up ChromeDriver
-        uses: nanasess/setup-chromedriver@v2
-
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
@@ -33,7 +30,7 @@ jobs:
         env:
           X_REPORT_API_URL: ${{ secrets.X_REPORT_API_URL }}
           X_REPORT_SECRET: ${{ secrets.X_REPORT_SECRET }}
-          CHROME_DRIVER_PATH: chromedriver
+          CHROME_DRIVER_PATH: auto
           CHROME_BINARY_PATH: ""
         run: |
           python3 scripts/caspit_xreport.py

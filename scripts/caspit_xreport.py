@@ -17,6 +17,13 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+# Try to import webdriver-manager (used on GitHub Actions)
+try:
+    from webdriver_manager.chrome import ChromeDriverManager
+    HAS_WEBDRIVER_MANAGER = True
+except ImportError:
+    HAS_WEBDRIVER_MANAGER = False
+
 VAT_RATE = 1.18
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
@@ -86,7 +93,13 @@ def get_totals(account):
     # Set Chrome binary path only if specified (not needed on Linux with system Chrome)
     if CHROME_BINARY_PATH and os.path.exists(CHROME_BINARY_PATH):
         options.binary_location = CHROME_BINARY_PATH
-    driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
+    
+    # Use webdriver-manager if available and no valid local driver path
+    if CHROME_DRIVER_PATH == "auto" or (HAS_WEBDRIVER_MANAGER and not os.path.exists(CHROME_DRIVER_PATH)):
+        print("Using webdriver-manager to get ChromeDriver...")
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    else:
+        driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
     try:
         driver.get(LOGIN_URL)
         wait = WebDriverWait(driver, 10)

@@ -13,11 +13,13 @@ export async function GET() {
     }
     await prisma.$queryRaw`SELECT 1`;
     const count = await prisma.xReportSnapshot.count();
+    const secretConfigured = Boolean(process.env.X_REPORT_SECRET);
     return NextResponse.json({
       ok: true,
       message: "Database connected",
       tableExists: true,
       reportCount: count,
+      secretConfigured,
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);

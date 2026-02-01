@@ -60,6 +60,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const secret = process.env.X_REPORT_SECRET;
+  console.log("POST: X_REPORT_SECRET exists?", !!secret);
+  console.log("POST: X_REPORT_SECRET length:", secret?.length || 0);
   if (!secret) {
     return NextResponse.json(
       { error: "X_REPORT_SECRET not configured." },
@@ -67,6 +69,9 @@ export async function POST(req: Request) {
     );
   }
   const headerSecret = req.headers.get("x-report-secret");
+  console.log("POST: Header secret exists?", !!headerSecret);
+  console.log("POST: Header secret length:", headerSecret?.length || 0);
+  console.log("POST: Secrets match?", headerSecret === secret);
   if (headerSecret !== secret) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
